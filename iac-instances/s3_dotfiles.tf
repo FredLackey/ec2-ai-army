@@ -1,6 +1,7 @@
 # S3 bucket for storing dotfiles
 resource "aws_s3_bucket" "dotfiles" {
-  bucket = "${var.aws_profile}-ai-army-dotfiles-${random_string.bucket_suffix.result}"
+  bucket        = "${var.aws_profile}-ai-army-dotfiles-${random_string.bucket_suffix.result}"
+  force_destroy = true # Allow bucket to be destroyed even if it contains objects
 
   tags = {
     Name        = "${var.instance_name_prefix}-dotfiles"
@@ -15,12 +16,12 @@ resource "random_string" "bucket_suffix" {
   upper   = false
 }
 
-# S3 bucket versioning
+# S3 bucket versioning - Disabled to allow easier cleanup
 resource "aws_s3_bucket_versioning" "dotfiles" {
   bucket = aws_s3_bucket.dotfiles.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Disabled"
   }
 }
 
