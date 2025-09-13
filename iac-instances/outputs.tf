@@ -60,3 +60,28 @@ output "army_size" {
   description = "Total number of instances in the army"
   value       = var.instance_count
 }
+
+output "dotfiles_s3_bucket" {
+  description = "Name of the S3 bucket containing dotfiles"
+  value       = aws_s3_bucket.dotfiles.id
+}
+
+output "dotfiles_s3_bucket_arn" {
+  description = "ARN of the S3 bucket containing dotfiles"
+  value       = aws_s3_bucket.dotfiles.arn
+}
+
+output "iam_instance_profile" {
+  description = "Name of the IAM instance profile for EC2 instances"
+  value       = aws_iam_instance_profile.ai_army_instance_profile.name
+}
+
+output "dotfiles_sync_command" {
+  description = "Command to manually sync dotfiles from S3 to an instance"
+  value       = "sudo /usr/local/bin/sync-dotfiles.sh"
+}
+
+output "dotfiles_upload_command" {
+  description = "Command to manually upload local dotfiles to S3"
+  value       = "aws s3 sync ./dotfiles/ s3://${aws_s3_bucket.dotfiles.id}/dotfiles/ --delete --profile ${var.aws_profile} --region ${var.aws_region}"
+}

@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# Bash Prompt Configuration
+
+# Colors
+RED="\[\033[0;31m\]"
+GREEN="\[\033[0;32m\]"
+YELLOW="\[\033[0;33m\]"
+BLUE="\[\033[0;34m\]"
+PURPLE="\[\033[0;35m\]"
+CYAN="\[\033[0;36m\]"
+WHITE="\[\033[0;37m\]"
+RESET="\[\033[0m\]"
+BOLD="\[\033[1m\]"
+
+# Git branch in prompt
+parse_git_branch() {
+    git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/'
+}
+
+# Git status indicators
+parse_git_status() {
+    local status=$(git status --porcelain 2>/dev/null)
+    local output=""
+
+    if [[ -n $status ]]; then
+        if echo "$status" | grep -q "^??"; then
+            output="${output}?"  # Untracked files
+        fi
+        if echo "$status" | grep -q "^ M\|^M "; then
+            output="${output}*"  # Modified files
+        fi
+        if echo "$status" | grep -q "^A "; then
+            output="${output}+"  # Added files
+        fi
+        if echo "$status" | grep -q "^D "; then
+            output="${output}-"  # Deleted files
+        fi
+    fi
+
+    [[ -n $output ]] && echo " [$output]"
+}
+
+# Set the prompt
+set_prompt() {
+    local last_exit_code=$?
+
+    # Show different color based on last command exit code
+    local prompt_symbol_color="${GREEN}"
+    if [ $last_exit_code -ne 0 ]; then
+        prompt_symbol_color="${RED}"
+    fi
+
+    # Check if running as root
+    local user_color="${GREEN}"
+    if [ "$EUID" -eq 0 ]; then
+        user_color="${RED}"
+    fi
+
+    # Build the prompt
+    PS1=""
+
+    # Time
+    PS1+="${CYAN}[\t]${RESET} "
+
+    # User@Host
+    PS1+="${user_color}\u${RESET}@${YELLOW}\h${RESET}"
+
+    # Current directory
+    PS1+=":${BLUE}\w${RESET}"
+
+    # Git information
+    local git_branch=$(parse_git_branch)
+    if [[ -n $git_branch ]]; then
+        PS1+="${PURPLE}${git_branch}${RESET}"
+        PS1+="${YELLOW}$(parse_git_status)${RESET}"
+    fi
+
+    # New line and prompt symbol
+    PS1+="\n${prompt_symbol_color}➜${RESET} "
+
+    # Set terminal title
+    case "$TERM" in
+    xterm*|rxvt*)
+        PS1="\[\e]0;\u@\h: \w\a\]$PS1"
+        ;;
+    *)
+        ;;
+    esac
+}
+
+# Set PROMPT_COMMAND to update prompt before each command
+PROMPT_COMMAND='set_prompt'
+
+# Secondary prompt
+PS2="${YELLOW}→ ${RESET}"

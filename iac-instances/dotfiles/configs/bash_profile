@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Source bash configuration files
+source_bash_files() {
+    declare -r CURRENT_DIRECTORY="$(pwd)"
+
+    declare -r -a FILES_TO_SOURCE=(
+        "bash_exports"
+        "bash_aliases"
+        "bash_functions"
+        "bash_options"
+        "bash_prompt"
+        "bash.local"  # For local settings not under version control
+    )
+
+    local file=""
+    local i=""
+
+    for i in ${!FILES_TO_SOURCE[*]}; do
+        file="$HOME/.${FILES_TO_SOURCE[$i]}"
+        [ -r "$file" ] && . "$file"
+    done
+
+    cd "$CURRENT_DIRECTORY"
+}
+
+# Load NVM
+export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+# Source bash files
+source_bash_files
+unset -f source_bash_files
+
+# Clear system messages
+clear

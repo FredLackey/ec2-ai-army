@@ -1,0 +1,130 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  # Essential packages needed for dotfiles sync
+  - curl
+  - ca-certificates
+  - gnupg
+  - awscli
+  - unattended-upgrades
+  # Note: Other packages (git, docker, vim, etc.) will be installed by dotfiles/setup.sh
+
+write_files:
+  - path: /usr/local/bin/sync-dotfiles.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      # Configuration
+      S3_BUCKET="${s3_bucket_name}"
+      S3_REGION="${aws_region}"
+      DOTFILES_DIR="/home/ubuntu/dotfiles"
+      LOG_FILE="/var/log/dotfiles-sync.log"
+
+      # Function to log messages
+      log_message() {
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+      }
+
+      # Create dotfiles directory if it doesn't exist
+      if [ ! -d "$DOTFILES_DIR" ]; then
+        log_message "Creating dotfiles directory at $DOTFILES_DIR"
+        mkdir -p "$DOTFILES_DIR"
+        chown ubuntu:ubuntu "$DOTFILES_DIR"
+      fi
+
+      # Sync dotfiles from S3
+      log_message "Starting sync from S3 bucket: $S3_BUCKET"
+
+      if aws s3 sync "s3://$S3_BUCKET/dotfiles/" "$DOTFILES_DIR/" --region "$S3_REGION" --delete; then
+        log_message "Successfully synced dotfiles from S3"
+
+        # Set proper ownership
+        chown -R ubuntu:ubuntu "$DOTFILES_DIR"
+
+        # Make scripts executable
+        find "$DOTFILES_DIR" -type f -name "*.sh" -exec chmod +x {} \;
+
+        # Run setup.sh if it exists
+        if [ -f "$DOTFILES_DIR/setup.sh" ]; then
+          log_message "Running dotfiles setup script"
+          cd "$DOTFILES_DIR"
+          sudo -u ubuntu bash ./setup.sh 2>&1 | tee -a "$LOG_FILE"
+          log_message "Dotfiles setup completed"
+        else
+          log_message "No setup.sh found in dotfiles directory"
+        fi
+      else
+        log_message "ERROR: Failed to sync dotfiles from S3"
+        exit 1
+      fi
+
+      log_message "Dotfiles sync and setup completed successfully"
+
+  - path: /etc/systemd/system/dotfiles-sync.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Sync dotfiles from S3
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/sync-dotfiles.sh
+      User=root
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/dotfiles-sync.timer
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Run dotfiles sync every hour
+
+      [Timer]
+      OnBootSec=5min
+      OnUnitActiveSec=1h
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  # Set hostname
+  - hostnamectl set-hostname ${hostname}
+
+  # Configure automatic security updates
+  - dpkg-reconfigure -plow unattended-upgrades
+
+  # Create workspace directory
+  - mkdir -p /opt/ai-workspace
+  - chown ubuntu:ubuntu /opt/ai-workspace
+
+  # Enable and start dotfiles sync service
+  - systemctl daemon-reload
+  - systemctl enable dotfiles-sync.service
+  - systemctl enable dotfiles-sync.timer
+  - systemctl start dotfiles-sync.service
+  - systemctl start dotfiles-sync.timer
+
+  # Create welcome message
+  - |
+    cat > /etc/motd <<EOF
+    ======================================
+    Welcome to AI Host Army - ${node_name}
+    Instance: ${hostname}
+    SSH key: ${key_name}
+    Dotfiles: Synced from S3
+    ======================================
+    EOF
+
+  # Log completion
+  - echo "$(date): Cloud-init completed for ${hostname}" >> /var/log/cloud-init-complete.log
+
+final_message: "Cloud-init completed in $UPTIME seconds"

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# Source bash_profile if it exists
+[ -n "$PS1" ] && [ -f "$HOME/.bash_profile" ] && . "$HOME/.bash_profile"

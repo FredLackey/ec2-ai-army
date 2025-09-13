@@ -1,0 +1,59 @@
+#!/bin/bash
+
+alias ..="cd .."
+alias ...="cd ../.."
+alias ....="cd ../../.."
+alias cd..="cd .."
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+alias cp="cp -iv"
+#             │└─ list copied files
+#             └─ prompt before overwriting an existing file
+
+alias mkdir="mkdir -pv"
+#                   │└─ list created directories
+#                   └─ create intermediate directories
+
+alias mv="mv -iv"
+#             │└─ list moved files
+#             └─ prompt before overwriting an existing file
+
+alias rm="rm -rf --"
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+alias :q="exit"
+alias c="clear"
+alias ch="history -c && > ~/.bash_history"
+alias d="cd ~/Desktop"
+alias e="vim --"
+alias g="git"
+alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
+alias ll="ls -l"
+alias m="man"
+alias map="xargs -n1"
+alias n="npm"
+alias p="cd ~/projects"
+alias path='printf "%b\n" "${PATH//:/\\n}"'
+alias q="exit"
+alias t="tmux"
+alias y="yarn"
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Load OS specific configs.
+
+. "$OS/bash_aliases"
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Customizations
+
+alias dp="docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}'"
+alias iprisma="npm i --save-dev prisma@latest && npm i @prisma/client@latest"
+alias count-files="find . -maxdepth 1 -type f | wc -l"
+alias count-folders="find . -mindepth 1 -maxdepth 1 -type d | wc -l"
+alias count='echo "Files  : $(find . -maxdepth 1 -type f | wc -l)" && echo "Folders: $(find . -mindepth 1 -maxdepth 1 -type d | wc -l)"'
+alias rm='rm_safe'
+

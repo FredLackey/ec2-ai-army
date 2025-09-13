@@ -10,7 +10,12 @@ The Terraform state for this module uses the S3 bucket: `tfstate-ai-army-instanc
 
 The goal of this project is to dynamically create a fleet of EC2 instances running Ubuntu. The number of instances can be easily configured through a Terraform variable, allowing you to scale your AI compute resources as needed.
 
-This first version of the package provisions the EC2 instances and generates the necessary SSH keys for access. The next version will focus on bootstrapping the instances with specific AI tools and libraries.
+This module provisions EC2 instances with:
+- Automatic SSH key generation and management
+- S3-based dotfiles synchronization for consistent development environments
+- Cloud-init bootstrapping with Docker, Python, and development tools
+- IAM roles for secure S3 access
+- Automatic dotfiles sync on boot and hourly updates
 
 ## Prerequisites
 
@@ -100,6 +105,40 @@ The module provides the following outputs:
 - `security_group_id` - Security group ID for the instances
 - `key_name` - Name of the SSH key pair
 - `ssh_connection_commands` - Ready-to-use SSH commands for each instance
+- `dotfiles_s3_bucket` - Name of the S3 bucket containing dotfiles
+- `dotfiles_sync_command` - Command to manually sync dotfiles on instances
+- `dotfiles_upload_command` - Command to upload local dotfiles to S3
+
+## Dotfiles Management
+
+The module automatically provisions a dotfiles management system:
+
+### Automatic Synchronization
+- Dotfiles are stored in an S3 bucket created during deployment
+- Each instance syncs dotfiles on boot and every hour via systemd timer
+- The `dotfiles/` directory is automatically uploaded to S3 during `terraform apply`
+
+### Manual Management
+Use the provided script to manage dotfiles:
+
+```bash
+# Upload local dotfiles to S3
+./scripts/manage-dotfiles.sh upload
+
+# Sync dotfiles to all instances
+./scripts/manage-dotfiles.sh sync
+
+# Sync to a specific instance
+./scripts/manage-dotfiles.sh sync -i i-1234567890
+
+# Check sync status
+./scripts/manage-dotfiles.sh status
+```
+
+### Dotfiles Location on Instances
+- Dotfiles are synced to `/home/ubuntu/dotfiles/`
+- If a `setup.sh` script exists in the dotfiles directory, it runs automatically
+- Sync logs are available at `/var/log/dotfiles-sync.log`
 
 ## SSH Access
 
@@ -163,3 +202,7 @@ This module creates:
 - SSH key pair (generated automatically)
 - Encrypted EBS root volumes
 - Optional CloudWatch detailed monitoring
+- S3 bucket for dotfiles storage with versioning and encryption
+- IAM role and instance profile for S3 access
+- Cloud-init configuration for automated instance setup
+- Systemd services for automated dotfiles synchronization

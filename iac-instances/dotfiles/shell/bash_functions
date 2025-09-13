@@ -1,0 +1,1709 @@
+#!/bin/bash
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Clone a repository and install its dependencies.
+#
+# Usage example:
+#
+#   clone https://github.com/user/repo.git
+
+clone() {
+
+    git clone "$1" \
+        || return
+
+    cd "$(basename "${1%.*}")" \
+        || return
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    # Check if there are dependencies to be installed.
+
+    if [ ! -f "package.json" ]; then
+        return
+    fi
+
+    # Check if the project uses Yarn.
+
+    if [ -f "yarn.lock" ] && command -v "yarn" $> /dev/null; then
+        printf "\n"
+        yarn install
+        return
+    fi
+
+    # If not, assume it uses npm.
+
+    if command -v "npm" $> /dev/null; then
+        printf "\n"
+        npm install
+    fi
+
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Create data URI from a file.
+#
+# Usage example:
+#
+#   datauri image.png
+
+datauri() {
+
+    local mimeType=""
+
+    if [ ! -f "$1" ]; then
+        printf "%s is not a file.\n" "$1"
+        return
+    fi
+
+    mimeType=$(file --brief --mime-type "$1")
+    #               └─ do not prepend the filename to the output
+
+    if [[ $mimeType == text/* ]]; then
+        mimeType="$mimeType;charset=utf-8"
+    fi
+
+    printf "data:%s;base64,%s" \
+        "$mimeType" \
+        "$(openssl base64 -in "$1" | tr -d "\n")"
+
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Delete files that match a certain pattern from the current directory.
+#
+# Usage example:
+#
+#   delete-files "*.log"  # Delete all .log files
+#   delete-files          # Delete all .DS_Store files (default)
+
+delete-files() {
+    local q="${1:-*.DS_Store}"
+    find . -type f -name "$q" -ls -delete
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Execute Vim macro on specified files.
+#
+# Usage example:
+#
+#   evm file1.txt file2.txt 3  # Run macro 'q' 3 times on file1.txt and file2.txt
+#   evm file.txt             # Run macro 'q' 1 time on file.txt
+
+evm() {
+
+    local numberOfTimes="${*: -1}"
+    local files
+
+    if [[ "$numberOfTimes" =~ ^[0-9]+$ ]]; then
+        files=("${@:1:$#-1}")
+    else
+        numberOfTimes="1"
+        files=("$@")
+    fi
+
+    for file in "${files[@]}"; do
+        printf "* %s\n" "$file"
+        vim \
+            -c "norm! $numberOfTimes@q" \
+            -c "wq" \
+            "$file"
+    done
+
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Search history using grep and less.
+#
+# Usage example:
+#
+#   h "git commit"
+
+h() {
+    #           ┌─ Enable colors for pipe.
+    #           │  ("--color=auto" enables colors only
+    #           │   if the output is in the terminal.)
+    grep --color=always "$*" "$HISTFILE" \
+        | less --no-init --raw-control-chars
+          #    │         └─ Display ANSI color escape sequences in raw form.
+          #    └─ Don't clear the screen after quitting less.
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# From the specified files, rename the files containing a date
+# in the filename to only the date in the following format:
+#
+#    <year>-<month>-<day> <hour>.<minute>.<second>
+#
+# Usage examples:
+#
+#  * rename-files-with-date-in-name path/to/some/directory path/to/some/file ...
+
+rename-files-with-date-in-name() (
+
+    rename_file() (
+        filePath=$(dirname "${1%/}")
+        fileName=$(basename "$1")
+
+        # The following will do transformations such as:
+        #
+        #   * 20200505_050505.dng => 2020-05-05 05.05.05.dng
+        #   * Screenshot 2020-01-02 at 03.04.05.png => 2020-01-02 03-04-05.jpg
+        #   * Screenshot_20201010-101010_Something.jpg => 2020-10-10 10-10-10.jpg
+        #   * signal-2020-05-06-07-08-09-123.mp4 => 2020-05-06 07-08-09.mp4
+
+        newFilePath="${filePath}/$(printf "%s" "$fileName" | sed 's/[^0-9]*\([0-9]\{4\}\)[_-]\{0,1\}\([0-9]\{2\}\)[_-]\{0,1\}\([0-9]\{2\}\)[_-]\{0,1\}\( at \)\{0,1\}\([0-9]\{2\}\)[_.-]\{0,1\}\([0-9]\{2\}\)[_.-]\{0,1\}\([0-9]\{2\}\).*\(\..*\)$/\1-\2-\3 \5.\6.\7\8/')"
+
+        if [ "$newFilePath" != "$1" ]; then
+           mv -f "$1" "$newFilePath"
+        fi
+    )
+
+    #                 ┌─ Default to the current directory.
+    for filePath in "${@:-.}"; do
+        if [ -d "$filePath" ]; then
+            find "${filePath%/}" \
+                -type f \
+                -depth 1 \
+                -print \
+            | while read -r f; do
+                rename_file "$f"
+            done
+        elif [ -f "$filePath" ]; then
+            rename_file "$filePath"
+        fi
+    done
+
+)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Resize image.
+#
+# Create a new image based on the specified image resized by the
+# specified amount.
+#
+# $1: Path to the original image.
+# $2: Resize value (default is 50%).
+#     See also: https://imagemagick.org/script/command-line-processing.php#geometry
+#
+# Usage examples:
+#
+#   * resize-image ./path/to/image.jpg 30%
+#   * resize-image ./path/to/image.jpg 1000x1000!
+
+resize-image() {
+
+    # Check if ImageMagick's convert command-line tool is installed.
+
+    if ! command -v "convert" $> /dev/null; then
+        printf "ImageMagick's 'convert' command-line tool is not installed!"
+        exit
+    fi
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    declare path="$(dirname "$1")"
+    declare fileName="$(basename "$1")"
+    declare geometry="${2:-50%}"
+
+    convert \
+        "$1" \
+        -colorspace RGB \
+        +sigmoidal-contrast 11.6933 \
+        -define filter:filter=Sinc \
+        -define filter:window=Jinc \
+        -define filter:lobes=3 \
+        -sigmoidal-contrast 11.6933 \
+        -colorspace sRGB \
+        -background transparent \
+        -gravity center \
+        -resize "$geometry" \
+        +append \
+        "$path/_$fileName" \
+    && printf "* %s (%s)\n" \
+            "$path/_$fileName" \
+            "$geometry"
+
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Search for text within the current directory using grep and less.
+#
+# Usage example:
+#
+#   s "my_variable"
+
+s() {
+    grep --color=always "$*" \
+         --exclude-dir=".git" \
+         --exclude-dir="node_modules" \
+         --ignore-case \
+         --recursive \
+         . \
+        | less --no-init --raw-control-chars
+          #    │         └─ Display ANSI color escape sequences in raw form.
+          #    └─ Don't clear the screen after quitting less.
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Remove development artifact directories like `node_modules` and `bower_components`.
+#
+# Usage example:
+#
+#   clean-dev
+
+clean-dev() {
+    sudo find . -name "node_modules" -exec rm -rf '{}' +
+    find . -name "bower_components" -exec rm -rf '{}' +
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Kill Node Inspector processes.
+#
+# Usage example:
+#
+#   killni
+
+killni() {
+    killni_target='node --debug-brk'
+    ps -ef | grep "$killni_target" | grep -v grep | awk '{print $2}' | xargs kill -9
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Commit and push a Node project using the package version as the commit message.
+#
+# Usage example:
+#
+#   vpush
+
+vpush() {
+
+    # Ensure JQ is installed
+    if ! cmd_exists "jq"; then
+        printf "jq is required, please install it!\n"
+        exit 1
+    fi
+
+    pkg_ver=$(jq '.version' package.json)
+    pkg_ver=${pkg_ver//\"/}
+    git add -A
+    git commit -a -S -m $pkg_ver
+    git push origin master
+
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Set git user email and name to public defaults.
+#
+# Usage example:
+#
+#   set-git-public
+
+set-git-public(){
+    git config user.email "fred.lackey@gmail.com"
+    git config user.name "Fred Lackey"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Back up the ~/Source directory using rsync.
+#
+# Usage example:
+#
+#   backup-source /path/to/backups/
+
+backup-source(){
+    backupdir="$*$(date +"%Y%m%d%H%M%S")/"
+    backupcmd="rsync -arv --progress --no-links --exclude={.Trash,.android,.atom,.bash_sessions,.cache,.cups,.dropbox,.git,.next,.npm,.nvm,.viminfo,bower_components,node_modules,.tmp,.idea,.DS_Store,.terraform} ~/Source $backupdir"
+    mkdir -p "$backupdir"
+    eval "$backupcmd"
+    cd "$backupdir"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Back up various user directories using rsync.
+#
+# Usage example:
+#
+#   backup-all /path/to/backups/
+
+backup-all(){
+
+    excludes=".terraform,.android,.atom,.bash_sessions,bower_components,.cache,.cups,.dropbox,.DS_Store,.git,_gsdata_,.idea,node_modules,.next,.npm,.nvm,\$RECYCLE.BIN,System\ Volume\ Information,.TemporaryItems,.Trash,.Trashes,.tmp,.viminfo"
+
+    backupdir="$*"
+    backupcmd="rsync -arv --progress --no-links --exclude={$excludes} ~/Downloads $backupdir"
+    eval "$backupcmd"
+
+    backupdir="$*$(date +"%Y%m%d%H%M%S")/"
+    backupcmd="rsync -arv --progress --no-links --exclude={$excludes} ~/Backups ~/Desktop ~/Documents ~/Microsoft ~/Movies ~/Music ~/Pictures ~/Public ~/Source ~/Templates ~/Temporary ~/Videos $backupdir"
+    mkdir -p "$backupdir"
+    eval "$backupcmd"
+
+    cd "$backupdir"
+    ls -la
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Organize files in the current directory into subdirectories based on date in filename.
+#
+# Usage example:
+#
+#   org-by-date
+
+org-by-date(){
+    ls -A1 | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2}' | while read -r line; do
+        DNAME="$(echo $line | grep -Eo '[[:digit:]]{4}-[[:digit:]]{2}-[[:digit:]]{2}' | sed 's#-#/#g')"
+        mkdir -p "./$DNAME"
+        mv "$line" "./$DNAME/"
+    done
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Download a Pluralsight course using yt-dlp.
+#
+# Usage example:
+#
+#   get-course course-name-from-url username password
+
+get-course(){
+    local usage="get-course %COURSE_NAME_FROM_URL% %USERNAME% %PASSWORD%";
+    local course="$1";
+    local username="$2";
+    local password="$3";
+    local prefix="";
+    if [ -e "/usr/local/bin/yt-dlp" ]; then
+        prefix="/usr/local/bin/";
+    fi
+    if [ -z "$course" ]; then
+      echo "Problem getting Pluralisight course: Course name not supplied"
+      echo "$usage"
+    elif [ -z "$username" ]; then
+      echo "Problem getting Pluralisight course: Username not supplied"
+      echo "$usage"
+    elif [ -z "$password" ]; then
+      echo "Problem getting Pluralisight course: Password not supplied"
+      echo "$usage"
+    else
+      eval "${prefix}yt-dlp --verbose --username $username --password $password --rate-limit 50K --sleep-interval 600 -o \"%(autonumber)s - %(title)s.%(ext)s\" \"https://app.pluralsight.com/library/courses/${course}\""
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Download videos from a YouTube channel using yt-dlp.
+#
+# Usage example:
+#
+#   get-channel channelName
+
+get-channel(){
+    local usage="get-channel %COURSE_NAME_FROM_URL%";
+    local channel="$1";
+    local prefix="";
+    if [ -e "/usr/local/bin/yt-dlp" ]; then
+        prefix="/usr/local/bin/";
+    fi
+    if [ -z "$channel" ]; then
+      echo "Problem getting Youtube channel: Channel name not supplied"
+      echo "$usage"
+    else
+      eval "${prefix}yt-dlp -f best -ciw -v -o \"%(upload_date)s - %(title)s.%(ext)s\" https://www.youtube.com/user/$channel"
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Download audio or video from a URL using yt-dlp.
+#
+# Usage example:
+#
+#   get-tunes https://www.youtube.com/watch?v=video_id audio-only
+#   get-tunes https://www.youtube.com/playlist?list=playlist_id
+
+get-tunes(){
+    local usage="get-tunes %PLAYLIST_OR_VIDEO_URL% [audio-only | video-only]";
+    local url="$1";
+    local option="$2";
+    local prefix="";
+    if [ -f "/usr/local/bin/yt-dlp" ]; then
+        prefix="/usr/local/bin/";
+    fi
+    if [ -z "${url}" ]; then
+        echo "Problem fetching track: Track URL not supplied";
+        echo "$usage";
+    elif [ -z "${option}" ]; then
+        echo "Fetching audio & video...";
+        eval "${prefix}yt-dlp --buffer-size 16K --keep-video --audio-format mp3 --extract-audio --embed-thumbnail --prefer-insecure --format mp4 --ignore-errors --output '%(title)s.%(ext)s' $1";
+    elif [[ "$option" == "audio-only" ]]; then
+        echo "Excluding video...";
+        eval "${prefix}yt-dlp --buffer-size 16K --audio-format mp3 --extract-audio --embed-thumbnail --prefer-insecure --ignore-errors --output '%(title)s.%(ext)s' $1";
+    elif [[ "$option" == "video-only" ]]; then
+        echo "Excluding audio...";
+        eval "${prefix}yt-dlp --buffer-size 16K --keep-video --prefer-insecure --format mp4 --ignore-errors --output '%(title)s.%(ext)s' $1";
+    else
+        echo "Problem fetching track: Unknown option supplied ($option)";
+        echo "$usage";
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Download video from a URL using yt-dlp.
+#
+# Usage example:
+#
+#   get-video https://www.youtube.com/watch?v=video_id
+
+get-video(){
+    local usage="get-tunes %VIDEO_URL%";
+    local url="$1";
+    if [ -f "/usr/local/bin/yt-dlp" ]; then
+        prefix="/usr/local/bin/";
+    fi
+    if [ -z "${url}" ]; then
+        echo "Problem fetching video: URL not supplied";
+        echo "$usage";
+    else
+        echo "Excluding audio...";
+        # Starting syntax from: https://www.jeffgeerling.com/blog/2022/how-download-mp4-youtube-every-time
+        # yt-dlp -S res,ext:mp4:m4a --recode mp4
+        # yt-dlp -S res,ext:mp4:m4a --recode mp4 --output '%(title)s.%(ext)s' $1
+        # yt-dlp -S res,ext:mp4:m4a --recode mp4 --output '%(title)s.%(ext)s' https://youtu.be/SxwxO8ruabY
+        eval "${prefix}yt-dlp --buffer-size 16K --keep-video --prefer-insecure --format mp4 --ignore-errors --output '%(title)s.%(ext)s' $1";
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Copy files from a source to a target directory, comparing sizes (using rsync or robocopy).
+# Skips files if they exist in the target with the same size.
+#
+# Usage example:
+#
+#   get-folder /path/to/source/ /path/to/target/
+
+get-folder() {
+    # Ensure source and target paths end with a forward slash
+    source="${1%/}/"
+    target="${2%/}/"
+
+    # Check if rsync command exists
+    if command -v rsync &> /dev/null; then
+        # Use rsync if available
+        for file in "$source"*; do
+            filename=$(basename "$file")
+            if [ -f "$target$filename" ]; then
+                # Check if file size matches
+                source_size=$(stat -c %s "$file")
+                target_size=$(stat -c %s "$target$filename")
+                if [ "$source_size" -eq "$target_size" ]; then
+                    echo "Skipping $filename as it already exists and has the same size."
+                else
+                    rsync -avP "$file" "$target"
+                fi
+            else
+                rsync -avP "$file" "$target"
+            fi
+        done
+    # Check if robocopy command exists (assuming it's run from Git Bash on Windows)
+    elif command -v robocopy &> /dev/null; then
+        # Use robocopy equivalent syntax
+        robocopy "$source" "$target" /E /Z /W:1 /R:3
+    else
+        echo "Error: Neither rsync nor robocopy command found."
+        return 1
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Remove all Docker containers, images, and volumes.
+#
+# Usage example:
+#
+#   docker-clean
+
+docker-clean(){
+    echo "This will remove ALL Docker containers, images, and volumes."
+    echo "This action cannot be undone!"
+    echo ""
+    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    echo ""
+
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Operation cancelled."
+        return 0
+    fi
+
+    echo "Proceeding with Docker cleanup..."
+
+    # Delete all containers
+    if docker ps -a -q >/dev/null 2>&1; then
+        echo "Removing all containers..."
+        docker rm -f $(docker ps -a -q)
+    else
+        echo "No containers to remove."
+    fi
+
+    # Delete all images
+    if docker images -q >/dev/null 2>&1; then
+        echo "Removing all images..."
+        docker images -q | xargs docker rmi -f
+    else
+        echo "No images to remove."
+    fi
+
+    # Delete volumes
+    if docker volume ls -q >/dev/null 2>&1; then
+        echo "Removing all volumes..."
+        docker volume rm $(docker volume ls -q)
+    else
+        echo "No volumes to remove."
+    fi
+
+    echo "Docker cleanup completed."
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Clone a repository structure without the .git folder using rsync (effectively copying files).
+#
+# Usage example:
+#
+#   git-clone /path/to/source/repo/
+
+git-clone(){
+    eval "rsync -av --progress $* ./ --exclude .git --exclude README.md --exclude LICENSE --exclude node_modules --exclude bower_components"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Pull changes and update git submodules.
+#
+# Usage example:
+#
+#   git-pup
+
+git-pup(){
+    git pull && git submodule init && git submodule update && git submodule status
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Scan the local network for active IPs using nmap.
+#
+# Usage examples:
+#
+#   ips                 # Scan 192.168.1.0/24 with sudo
+#   ips 10.0.0.0 16     # Scan 10.0.0.0/16 with sudo
+#   ips ip-only         # Scan default network, show only IPs
+#   ips no-sudo       # Scan default network without sudo
+#   ips 192.168.1.0 24 ip-only no-sudo # Combine options
+
+ips(){
+    local usage="ips [%NETWORK_BASE_IP%] [%BIT_DEPTH%] [ip-only | no-sudo]"$'\n'"Default IP: 192.168.1.0"$'\n'"Default Mask: 24"
+    local addr="$1";
+    local mask="$2";
+    local prefix="";
+    local suffix="";
+
+    # Ensure nmap is installed
+    if ! cmd_exists "nmap"; then
+        printf "nmap is required, please install it!\n"
+        exit 1
+    fi
+
+    # display help if needed
+    if [[ "$@" =~ "help" ]]; then
+      echo "$usage";
+      return 0;
+    fi
+
+    # filter out details if only ips are needed
+    if [[ "$@" =~ "ip-only" ]]; then
+      suffix=" | grep report | awk '{print \$5}'";
+    fi
+
+    # remove sudo if is to be run without it
+    if [[ "$@" =~ "no-sudo" ]]; then
+      prefix="";
+    else
+      prefix="sudo ";
+    fi
+
+    # ensure the subnet mask is between 4 and 32 bits (default to 24)
+    if [[ "$mask" =~ ^[0-9]+$ ]] && [ "$mask" -ge 4 -a "$mask" -le 30 ]; then
+      mask="$mask";
+    else
+      echo "Invalid mask supplied.  Defaulting to 24 bits."
+      mask="24";
+    fi
+
+    # proceed if the first value is a valid IP address
+    if [[ ! $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+      echo "Invalid IP address supplied.  Defaulting to 192.168.1.0."
+      addr="192.168.1.0";
+    fi
+
+    eval "${prefix}nmap $addr/$mask -n -sP${suffix}"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Refresh files in a target directory from a source directory, overwriting existing files.
+#
+# Usage example:
+#
+#   refresh-files /path/to/source/ [ /path/to/target/ ] # Target defaults to current directory
+
+refresh-files(){
+
+    # Compares files in current project (the TARGET_FOLDER)
+    # to files in a stable project (SOURCE_FOLDER) and copies
+    # over local copies with stable version if both exist.
+    # Useful for protecting critical files, such as vendor
+    # source, sensitive data, etc.
+
+    local usage="refresh-files SOURCE_FOLDER [TARGET_FOLDER]"
+    local source="$1";
+    local target="${2:-${PWD}}";
+    local noise="$3";
+    local err="";
+    local relpath="";
+    local from=""
+    local counter=0;
+
+    if [ -z "$source" ]; then
+      err="Source folder not supplied.";
+    elif [ ! -d "$source" ]; then
+      err="Source folder does not exist.";
+    elif [ ! -d "$target" ]; then
+      echo "target: $target"
+      err="Target folder does not exist: $target";
+    elif [ ! -z "$noise" ]; then
+      err="Extra noise supplied in command.";
+    fi
+
+    if [ "$err" != "" ]; then
+      echo "Problem refreshing files: $err";
+      echo ""
+      echo "USAGE: $usage"
+    else
+
+      echo "Refreshing files...";
+      echo "FROM: $source";
+      echo "TO  : $target";
+      echo "-----";
+
+      for file in $(find "$target" -type f -not \( -path "*/node_modules/*" \) -not \( -path "*/bower_components/*" \)); do
+
+        relpath=$(echo "$file" | sed "s@$target@@");
+        from=${source%/}${relpath};
+
+        if [ -f "$from"  ]; then
+          echo "$relpath"
+          eval "cp $from $file";
+          counter=$((counter+1))
+        fi
+
+      done
+
+      echo "-----";
+      echo "Files refreshed: $counter";
+
+    fi
+
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Update npm and bower dependencies using ncu across the project.
+#
+# Usage example:
+#
+#   ncu-update-all
+
+ncu-update-all(){
+
+  if ! cmd_exists "ncu"; then
+      printf "ncu is required, please install it!\n"
+      exit 1
+  fi
+
+  for file in $(find . -type f -name "package.json" -not \( -path "*/node_modules/*" \) -not \( -path "*/bower_components/*" \)); do
+
+    if [ -f "$file"  ]; then
+      eval "ncu -a -u --packageFile $file"
+    fi
+
+  done
+
+  for file in $(find . -type f -name "bower.json" -not \( -path "*/node_modules/*" \) -not \( -path "*/bower_components/*" \)); do
+
+    if [ -f "$file"  ]; then
+      eval "ncu -a -u -m bower --packageFile $file"
+    fi
+
+  done
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Convert text from selection to speech using festival.
+# (Requires xsel and festival to be installed)
+#
+# Usage example: Select text, then run:
+#
+#   talk
+
+talk(){
+    eval "xsel | festival --tts --pipe"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Compare files in the current directory with another, removing the smaller version of each pair.
+#
+# Usage example:
+#
+#   remove_smaller_files /path/to/other/directory
+
+remove_smaller_files(){
+    LEFT_DIR="$PWD"
+    RIGHT_DIR="$*"
+    echo "LEFT : $LEFT_DIR"
+    echo "RIGHT: $RIGHT_DIR"
+    files="$(find -L "$LEFT_DIR" -type f)"
+    echo "$files" | while read file; do
+        FILE_NAME=${file#$LEFT_DIR}
+        LEFT_FILE="$file"
+        RIGHT_FILE="$RIGHT_DIR""$FILE_NAME"
+        #echo "----------"
+        #echo "Left File : $LEFT_FILE"
+        #echo "Right File: $RIGHT_FILE"
+        if [ -f "$LEFT_FILE" ]; then
+            if [ -f "$RIGHT_FILE" ]; then
+                LEFT_SIZE=( $( ls -Lon "$LEFT_FILE" ) )
+                LEFT_BYTES=${LEFT_SIZE[3]}
+                RIGHT_SIZE=( $( ls -Lon "$RIGHT_FILE" ) )
+                RIGHT_BYTES=${RIGHT_SIZE[3]}
+                #echo "----------"
+                #echo "LEFT_SIZE: $LEFT_SIZE"
+                #echo "LEFT_BYTES: $LEFT_BYTES"
+                #echo "RIGHT_SIZE: $RIGHT_SIZE"
+                #echo "RIGHT_BYTES: $RIGHT_BYTES"
+                if [ "$LEFT_BYTES" -gt "$RIGHT_BYTES" ]; then
+                    echo "REMOVED: $RIGHT_FILE"
+                    eval "rm \"$RIGHT_BYTES\""
+                elif [ "$RIGHT_BYTES" -gt "$LEFT_BYTES" ]; then
+                    echo "REMOVED: $LEFT_FILE"
+                    eval "rm \"$LEFT_FILE\""
+                else
+                    echo "SKIPPED: $FILE_NAME (same size)"
+                fi
+            fi
+        fi
+    done
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Reinstall npm dependencies after removing node_modules and setting Node v18.
+#
+# Usage example:
+#
+#   npmi
+
+npmi() {
+    if [ ! -f "$PWD/package.json" ]; then
+        echo "Not an NPM package folder."
+        return 1
+    fi
+    if [ -e "$PWD/node_modules" ]; then
+        echo "Removing old node_modules folder..."
+        eval "rm -rf $PWD/node_modules"
+        if [ -e "$PWD/node_modules" ]; then
+            echo "... failure!"
+            return 1
+        else
+            echo "... done."
+        fi
+    fi
+    echo "Setting Node v18 and installing..."
+
+    export NVM_DIR=$HOME/.nvm;
+    source $NVM_DIR/nvm.sh;
+
+    eval "nvm use 18 && npm i"
+    if [ -e "$PWD/node_modules" ]; then
+        echo "... done."
+    else
+        echo "... failure!"
+        return 1
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Extract dependency names from a package.json file using jq.
+#
+# Usage examples:
+#
+#   get-dependencies ./package.json          # Get 'dependencies'
+#   get-dependencies ./package.json dev      # Get 'devDependencies'
+#   get-dependencies ../other/package.json peer # Get 'peerDependencies'
+
+get-dependencies() {
+    local package_json_path="$1"
+    local dependency_type_prefix="${2:-dependencies}"
+    local dependency_type=""
+
+    # Check if jq is installed
+    if ! command -v jq &> /dev/null; then
+        echo "Error: jq command is not installed. Please install jq and try again."
+        return 1
+    fi
+
+    # Check if a path was provided
+    if [[ -z "$package_json_path" ]]; then
+        echo "Usage: extract_dependencies /path/to/package.json [dependency_type_prefix]"
+        echo "Example: extract_dependencies /path/to/package.json dev"
+        return 1
+    fi
+
+    # Check if the package.json file exists
+    if [[ ! -f "$package_json_path" ]]; then
+        echo "Error: File not found: $package_json_path"
+        return 1
+    fi
+
+    # Determine the full dependency type based on the prefix if provided
+    if [[ -z "$dependency_type_prefix" ]]; then
+        dependency_type="dependencies"
+    else
+        case "$dependency_type_prefix" in
+            dev)
+                dependency_type="devDependencies"
+                ;;
+            peer)
+                dependency_type="peerDependencies"
+                ;;
+            opt)
+                dependency_type="optionalDependencies"
+                ;;
+            bundle)
+                dependency_type="bundledDependencies"
+                ;;
+            dependencies)
+                dependency_type="dependencies"
+                ;;
+            *)
+                echo "Error: Invalid dependency type prefix. Valid prefixes are: dev, peer, opt, bundle, dependencies."
+                return 1
+                ;;
+        esac
+    fi
+
+    # Check if the dependency type node exists and is not null
+    node_exists=$(jq -e --arg depType "$dependency_type" '.[$depType] != null' "$package_json_path")
+    if [[ $? -ne 0 || "$node_exists" != "true" ]]; then
+        return 0
+    fi
+
+    # Extract dependencies using jq
+    dependencies=$(jq -r --arg depType "$dependency_type" '.[$depType] | keys[]?' "$package_json_path")
+    if [[ -z "$dependencies" ]]; then
+        return 0
+    fi
+
+    echo "$dependencies"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Install dependencies listed in a specified package.json file.
+#
+# Usage examples:
+#
+#   install-dependencies-from ../source/package.json        # Install 'dependencies'
+#   install-dependencies-from ../source/package.json dev    # Install 'devDependencies' as dev dependencies
+
+install-dependencies-from() {
+    local package_json_path="$1"
+    local dependency_type_prefix="${2:-dependencies}"
+    local dependencies
+    local npm_flag=""
+
+    # Determine the npm flag based on the dependency type
+    case "$dependency_type_prefix" in
+        dev)
+            npm_flag="--save-dev"
+            ;;
+        peer)
+            npm_flag="--save-peer"
+            ;;
+        opt)
+            npm_flag="--save-optional"
+            ;;
+        bundle)
+            npm_flag="--save-bundled"
+            ;;
+        dependencies)
+            npm_flag="--save"
+            ;;
+        *)
+            echo "Error: Invalid dependency type prefix. Valid prefixes are: dev, peer, opt, bundle, dependencies."
+            return 1
+            ;;
+    esac
+
+    # Extract dependencies
+    dependencies=$(get-dependencies "$package_json_path" "$dependency_type_prefix")
+
+    if [[ -z "$dependencies" ]]; then
+        echo "No dependencies to install."
+        return 0
+    fi
+
+    # Install each dependency
+    for dependency in $dependencies; do
+        echo "Installing $dependency..."
+        npm install "$dependency@latest" $npm_flag
+    done
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# A wrapper around `rm` to prevent accidental removal of root or top-level directories.
+# Forbids removing '/', '/some_dir', '/*', or using '--no-preserve-root'.
+#
+# Usage example:
+#
+#   rm_safe file.txt directory/
+#   rm_safe -rf old_files/
+
+rm_safe() {
+    # Iterate over the arguments
+    for arg in "$@"; do
+        # Check if the argument is the root directory "/"
+        if [ "$arg" = "/" ]; then
+            echo "Error: Attempt to remove the root directory is forbidden!"
+            return 1
+        fi
+
+        # Check if the argument is any single directory in the root (e.g., "/bin", "/etc")
+        if [[ "$arg" =~ ^/[^/]+$ ]]; then
+            echo "Error: Attempt to remove a top-level directory is forbidden!"
+            return 1
+        fi
+
+        # Check if the argument is the wildcard pattern "/*"
+        if [ "$arg" = "/*" ]; then
+            echo "Error: Attempt to remove all files and directories in the root is forbidden!"
+            return 1
+        fi
+    done
+
+    # Check if the arguments contain "--no-preserve-root"
+    for arg in "$@"; do
+        if [ "$arg" = "--no-preserve-root" ]; then
+            echo "Error: Use of --no-preserve-root is forbidden!"
+            return 1
+        fi
+    done
+
+    # Run the actual rm command with the original arguments
+    command rm "$@"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Add all changes, commit with a message, and push to the current branch.
+#
+# Usage example:
+#
+#   git-push "Fix bug #123"
+
+git-push() {
+    local usage="git-push \"commit message\""
+    local message="$1"
+    local current_branch
+    local has_changes
+
+    # Check if a commit message was provided
+    if [ -z "$message" ]; then
+        echo "Error: Commit message is required"
+        echo "Usage: $usage"
+        return 1
+    fi
+
+    # Check if we're in a git repository
+    if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        echo "Error: Not in a git repository"
+        return 1
+    fi
+
+    # Check for any changes (staged, unstaged, or untracked files)
+    has_changes=$(git status --porcelain)
+    if [ -z "$has_changes" ]; then
+        echo "No changes detected in repository"
+        return 0
+    fi
+
+    # Get current branch name
+    current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+    if [ -z "$current_branch" ]; then
+        echo "Error: Could not determine current branch"
+        return 1
+    fi
+
+    # Add all changes, commit with message, and push to current branch
+    echo "Changes detected, proceeding with commit and push..."
+    git add -A && \
+    git commit -m "$message" && \
+    git push origin "$current_branch"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Curl a URL, expecting JSON, and pretty-print the output using jq.
+#
+# Usage example:
+#
+#   ccurl https://api.example.com/data
+
+ccurl() {
+  if [ -z "$1" ]; then
+    echo "Usage: ccurl <URL>"
+    return 1
+  fi
+  curl -s -H "Accept: application/json" "$1" | jq
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Clone all repositories from a GitHub organization into a specified directory.
+#
+# Usage example:
+#
+#   fetch-github-repos my-org ./cloned-repos
+
+fetch-github-repos() {
+  local org="$1"
+  local dest_dir="$2"
+
+  if [[ -z "$org" || -z "$dest_dir" ]]; then
+    echo "Usage: fetch-github-repos <organization> <destination-folder>"
+    return 1
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "Error: 'jq' is required but not installed. Install it with 'brew install jq' or 'sudo apt install jq'."
+    return 1
+  fi
+
+  # Create destination directory if it doesn't exist
+  mkdir -p "$dest_dir"
+
+  # Fetch repositories
+  echo "Fetching repositories for organization '$org'..."
+  local repos=$(curl -s "https://api.github.com/orgs/$org/repos?per_page=100" | jq -r '.[].ssh_url')
+
+  if [[ -z "$repos" ]]; then
+    echo "No repositories found or failed to fetch from GitHub."
+    return 1
+  fi
+
+  # Clone each repo
+  for repo in $repos; do
+    echo "Cloning $repo into $dest_dir..."
+    git clone "$repo" "$dest_dir/$(basename -s .git "$repo")"
+  done
+
+  echo "All repositories have been cloned."
+}
+
+git-backup() {
+    local target_folder="$1"
+    local ssh_repo="$2"
+    local timestamp
+    timestamp=$(date +"%Y%m%d-%H%M")
+
+    if [[ -z "$target_folder" ]]; then
+        echo "Usage: git-backup <target-folder> [ssh-repo]"
+        return 1
+    fi
+
+    mkdir -p "$target_folder"
+
+    local workdir repo_name archive_name repo_path
+
+    if [[ -n "$ssh_repo" ]]; then
+        workdir=$(mktemp -d)
+        git clone --mirror "$ssh_repo" "$workdir/mirror" > /dev/null 2>&1
+        repo_name=$(basename -s .git "$ssh_repo")
+        repo_path="$workdir/mirror"
+    else
+        if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+            echo "Error: not inside a Git repository."
+            return 1
+        fi
+        repo_path=$(git rev-parse --show-toplevel)
+        repo_name=$(basename "$repo_path")
+        workdir=$(mktemp -d)
+        git clone --mirror "$repo_path" "$workdir/mirror" > /dev/null 2>&1
+    fi
+
+    archive_name="${repo_name}-${timestamp}.zip"
+    archive_path="${target_folder}/${archive_name}"
+
+    # Create wrapper directory and move mirror there
+    wrapper_dir="${workdir}/wrapper"
+    mkdir -p "$wrapper_dir"
+    mv "$workdir/mirror" "$wrapper_dir/${repo_name}.git"
+
+    # Create README.md
+    cat > "$wrapper_dir/README.md" <<EOF
+# ${repo_name} Backup
+
+This is a mirror clone of the Git repository, created on ${timestamp}.
+
+## Usage
+
+To clone this backup and preserve all refs and history, run:
+
+    git clone --mirror ${repo_name}.git
+
+To clone it and create a working directory:
+
+    git clone ${repo_name}.git ${repo_name}-restored
+
+EOF
+
+    # Check for existing backups
+    latest_backup=$(ls -t "$target_folder"/${repo_name}-*.zip 2>/dev/null | head -n 1)
+    if [[ -n "$latest_backup" ]]; then
+        temp_extract=$(mktemp -d)
+        unzip -qq "$latest_backup" -d "$temp_extract"
+
+        old_hash=$(cd "$temp_extract"/* && git rev-parse HEAD 2>/dev/null)
+        new_hash=$(cd "$wrapper_dir/${repo_name}.git" && git rev-parse HEAD 2>/dev/null)
+
+        if [[ "$old_hash" == "$new_hash" && -n "$old_hash" ]]; then
+            echo "No changes since last backup. Skipping new archive."
+            rm -rf "$temp_extract" "$workdir"
+            return 0
+        fi
+        rm -rf "$temp_extract"
+    fi
+
+    (cd "$wrapper_dir" && zip -qr "$archive_path" .)
+    echo "Backup created at: $archive_path"
+
+    rm -rf "$workdir"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Initialize nginx configuration from template files.
+#
+# Usage examples:
+#
+#   nginx-init -d example.com -h http://127.0.0.1:3000 -f example.conf
+#   nginx-init --api -d api.example.com -h http://127.0.0.1:8080 -f api.conf --link
+
+nginx-init() {
+    local usage="nginx-init [OPTIONS]
+
+OPTIONS:
+    -a, --api       Use nginx-docker-host-api.conf template instead of nginx-docker-host.conf
+    -d, --domain    Domain name for server_name directive (can be used multiple times) (required)
+    -h, --host      Upstream URL for proxy_pass directive (required)
+    -f, --file      Output filename in /etc/nginx/sites-available (must end with .conf) (required)
+    -l, --link      Create symbolic link in /etc/nginx/sites-enabled
+
+EXAMPLES:
+    nginx-init -d example.com -h http://127.0.0.1:3000 -f example.conf
+    nginx-init -d example.com -d www.example.com -h http://127.0.0.1:3000 -f example.conf
+    nginx-init --api -d api.example.com -h http://127.0.0.1:8080 -f api.conf --link
+
+NOTE: This function will prompt for sudo authentication when writing to /etc/nginx/"
+
+    local use_api=false
+    local domains=()
+    local host=""
+    local filename=""
+    local create_link=false
+    local script_dir
+    local template_file
+    local sites_available="/etc/nginx/sites-available"
+    local sites_enabled="/etc/nginx/sites-enabled"
+
+    # Check if we have sudo access
+    echo "This function requires sudo access to write to /etc/nginx/"
+
+    # Try passwordless sudo first
+    if sudo -n true 2>/dev/null; then
+        echo "Using passwordless sudo"
+    else
+        # Fall back to regular sudo (will prompt for password if needed)
+        echo "Authenticating with sudo..."
+        if ! sudo -v; then
+            echo "Error: sudo authentication failed"
+            return 1
+        fi
+    fi
+
+        # Get the directory where this script is actually located (following symlinks)
+    local source_file="${BASH_SOURCE[0]}"
+    while [[ -L "$source_file" ]]; do
+        local link_target="$(readlink "$source_file")"
+        if [[ "$link_target" == /* ]]; then
+            source_file="$link_target"
+        else
+            source_file="$(cd "$(dirname "$source_file")" && pwd)/$link_target"
+        fi
+    done
+    script_dir="$(cd "$(dirname "$source_file")" && pwd)"
+
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -a|--api)
+                use_api=true
+                shift
+                ;;
+            -d|--domain)
+                domains+=("$2")
+                shift 2
+                ;;
+            -h|--host)
+                host="$2"
+                shift 2
+                ;;
+            -f|--file)
+                filename="$2"
+                shift 2
+                ;;
+            -l|--link)
+                create_link=true
+                shift
+                ;;
+            --help)
+                echo "$usage"
+                return 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "$usage"
+                return 1
+                ;;
+        esac
+    done
+
+    # Show usage if no arguments provided
+    if [[ $# -eq 0 && ${#domains[@]} -eq 0 && -z "$host" && -z "$filename" ]]; then
+        echo "$usage"
+        return 0
+    fi
+
+    # Validate required arguments
+    if [[ ${#domains[@]} -eq 0 ]]; then
+        echo "Error: At least one domain is required (-d or --domain)"
+        echo "$usage"
+        return 1
+    fi
+
+    if [[ -z "$host" ]]; then
+        echo "Error: Host URL is required (-h or --host)"
+        echo "$usage"
+        return 1
+    fi
+
+    if [[ -z "$filename" ]]; then
+        echo "Error: Filename is required (-f or --file)"
+        echo "$usage"
+        return 1
+    fi
+
+    # Validate filename ends with .conf
+    if [[ ! "$filename" =~ \.conf$ ]]; then
+        echo "Error: Filename must end with .conf"
+        return 1
+    fi
+
+    # Select template file
+    if [[ "$use_api" == true ]]; then
+        template_file="$script_dir/../../templates/nginx-docker-host-api.conf"
+    else
+        template_file="$script_dir/../../templates/nginx-docker-host.conf"
+    fi
+
+    # Check if template file exists
+    if [[ ! -f "$template_file" ]]; then
+        echo "Error: Template file not found: $template_file"
+        return 1
+    fi
+
+    # Check if sites-available directory exists
+    if [[ ! -d "$sites_available" ]]; then
+        echo "Error: Directory $sites_available does not exist"
+        return 1
+    fi
+
+    # Create output file path
+    local output_file="$sites_available/$filename"
+
+    # Check if output file already exists
+    if [[ -f "$output_file" ]]; then
+        echo "Warning: File $output_file already exists and will be overwritten"
+    fi
+
+    # Join domains into a single string for server_name directive
+    local domain_string
+    domain_string=$(printf "%s " "${domains[@]}")
+    domain_string="${domain_string% }"  # Remove trailing space
+
+    # Copy template and replace tokens
+    echo "Creating nginx configuration..."
+    echo "Template: $(basename "$template_file")"
+    echo "Domains: $domain_string"
+    echo "Host: $host"
+    echo "Output: $output_file"
+
+    # Perform token replacement and write to output file using sudo
+    sed -e "s|%DOMAINS%|$domain_string|g" \
+        -e "s|%HOST_URL%|$host|g" \
+        "$template_file" | sudo tee "$output_file" > /dev/null
+
+    if [[ $? -eq 0 ]]; then
+        echo "✓ Configuration file created successfully"
+    else
+        echo "✗ Failed to create configuration file"
+        return 1
+    fi
+
+    # Create symbolic link if requested
+    if [[ "$create_link" == true ]]; then
+        if [[ ! -d "$sites_enabled" ]]; then
+            echo "Error: Directory $sites_enabled does not exist"
+            return 1
+        fi
+
+        local link_path="$sites_enabled/$filename"
+
+        # Remove existing link if it exists
+        if [[ -L "$link_path" ]]; then
+            sudo rm "$link_path"
+            echo "Removed existing symbolic link"
+        fi
+
+        # Create new symbolic link
+        sudo ln -s "$output_file" "$link_path"
+        if [[ $? -eq 0 ]]; then
+            echo "✓ Symbolic link created: $link_path"
+        else
+            echo "✗ Failed to create symbolic link"
+            return 1
+        fi
+    fi
+
+    echo "Done!"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Install SSL certificates using certbot for nginx.
+#
+# Usage examples:
+#
+#   certbot-init -d example.com -e admin@example.com
+#   certbot-init -d example.com -d www.example.com -e admin@example.com
+
+certbot-init() {
+    local usage="certbot-init [OPTIONS]
+
+OPTIONS:
+    -d, --domain    Domain name for SSL certificate (can be used multiple times) (required)
+    -e, --email     Email address for Let's Encrypt registration (required)
+
+EXAMPLES:
+    certbot-init -d example.com -e admin@example.com
+    certbot-init -d example.com -d www.example.com -e admin@example.com
+    certbot-init -d api.example.com -d www.api.example.com -e webmaster@example.com
+
+NOTE: This function will install certbot if not present and requires sudo access"
+
+    local domains=()
+    local email=""
+
+    # Show usage if no arguments provided
+    if [[ $# -eq 0 ]]; then
+        echo "$usage"
+        return 0
+    fi
+
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -d|--domain)
+                if [[ -z "$2" || "$2" == -* ]]; then
+                    echo "Error: Domain value required after -d/--domain"
+                    echo "$usage"
+                    return 1
+                fi
+                domains+=("$2")
+                shift 2
+                ;;
+            -e|--email)
+                if [[ -z "$2" || "$2" == -* ]]; then
+                    echo "Error: Email value required after -e/--email"
+                    echo "$usage"
+                    return 1
+                fi
+                email="$2"
+                shift 2
+                ;;
+            --help)
+                echo "$usage"
+                return 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "$usage"
+                return 1
+                ;;
+        esac
+    done
+
+    # Validate required arguments
+    if [[ ${#domains[@]} -eq 0 ]]; then
+        echo "Error: At least one domain is required (-d or --domain)"
+        echo "$usage"
+        return 1
+    fi
+
+    if [[ -z "$email" ]]; then
+        echo "Error: Email address is required (-e or --email)"
+        echo "$usage"
+        return 1
+    fi
+
+    # Validate email format (basic check)
+    if [[ ! "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+        echo "Error: Invalid email format: $email"
+        return 1
+    fi
+
+    # Check if we have sudo access
+    echo "This function requires sudo access to install certbot and configure SSL"
+
+    # Try passwordless sudo first
+    if sudo -n true 2>/dev/null; then
+        echo "Using passwordless sudo"
+    else
+        # Fall back to regular sudo (will prompt for password if needed)
+        echo "Authenticating with sudo..."
+        if ! sudo -v; then
+            echo "Error: sudo authentication failed"
+            return 1
+        fi
+    fi
+
+    # Install certbot if not already installed
+    if ! command -v certbot &> /dev/null; then
+        echo "Installing certbot..."
+
+        # Detect the OS and install accordingly
+        if [[ -f /etc/debian_version ]]; then
+            # Debian/Ubuntu
+            sudo apt update
+            sudo apt install -y certbot python3-certbot-nginx
+        elif [[ -f /etc/redhat-release ]]; then
+            # CentOS/RHEL/Fedora
+            if command -v dnf &> /dev/null; then
+                sudo dnf install -y certbot python3-certbot-nginx
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y certbot python3-certbot-nginx
+            else
+                echo "Error: Unable to detect package manager for Red Hat-based system"
+                return 1
+            fi
+        else
+            echo "Error: Unsupported operating system for automatic certbot installation"
+            echo "Please install certbot manually and run this function again"
+            return 1
+        fi
+
+        if [[ $? -eq 0 ]]; then
+            echo "✓ Certbot installed successfully"
+        else
+            echo "✗ Failed to install certbot"
+            return 1
+        fi
+    else
+        echo "✓ Certbot is already installed"
+    fi
+
+    # Build domain arguments for certbot
+    local domain_args=""
+    for domain in "${domains[@]}"; do
+        domain_args="$domain_args -d $domain"
+    done
+
+    # Display what we're about to do
+    echo ""
+    echo "Requesting SSL certificate for:"
+    printf "  Domains: %s\n" "${domains[*]}"
+    echo "  Email: $email"
+    echo ""
+
+    # Run certbot command
+    echo "Running certbot..."
+    local certbot_cmd="sudo certbot --nginx --agree-tos --no-eff-email --email $email$domain_args"
+
+    echo "Executing: $certbot_cmd"
+    eval "$certbot_cmd"
+
+    if [[ $? -eq 0 ]]; then
+        echo ""
+        echo "✓ SSL certificate(s) installed successfully!"
+        echo ""
+        echo "Your nginx configuration has been automatically updated."
+        echo "You can test your SSL configuration at: https://www.ssllabs.com/ssltest/"
+        echo ""
+        echo "To renew certificates automatically, consider adding this to your crontab:"
+        echo "0 12 * * * /usr/bin/certbot renew --quiet"
+    else
+        echo ""
+        echo "✗ Failed to install SSL certificate(s)"
+        echo "Please check the error messages above and try again"
+        return 1
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Add certbot renewal cron job if it doesn't already exist.
+#
+# Usage example:
+#
+#   certbot-crontab-init
+
+certbot-crontab-init() {
+    local cron_line="0 12 * * * /usr/bin/certbot renew --quiet"
+    local temp_crontab
+    local cron_service=""
+
+    # Determine cron service name based on OS
+    if [[ -f /etc/debian_version ]]; then
+        cron_service="cron"
+    elif [[ -f /etc/redhat-release ]]; then
+        cron_service="crond"
+    else
+        echo "Warning: Unable to detect OS type, assuming 'cron' service name"
+        cron_service="cron"
+    fi
+
+    # Check if cron service is running
+    echo "Checking cron service status..."
+    if ! systemctl is-active --quiet "$cron_service"; then
+        echo "⚠ Cron service ($cron_service) is not running"
+        echo "Attempting to start and enable cron service..."
+
+        # Try passwordless sudo first
+        if sudo -n true 2>/dev/null; then
+            echo "Using passwordless sudo"
+        else
+            echo "This requires sudo access to manage the cron service"
+            if ! sudo -v; then
+                echo "Error: sudo authentication failed"
+                return 1
+            fi
+        fi
+
+        # Start and enable the cron service
+        if sudo systemctl start "$cron_service" && sudo systemctl enable "$cron_service"; then
+            echo "✓ Cron service started and enabled successfully"
+        else
+            echo "✗ Failed to start cron service"
+            echo "Please start the cron service manually: sudo systemctl start $cron_service"
+            return 1
+        fi
+    else
+        echo "✓ Cron service ($cron_service) is running"
+    fi
+
+    echo "Checking for existing certbot renewal cron job..."
+
+    # Get current crontab (redirect stderr to handle case where no crontab exists)
+    temp_crontab=$(crontab -l 2>/dev/null)
+    local crontab_exists=$?
+
+    # Check if the certbot renewal line already exists
+    if [[ $crontab_exists -eq 0 ]] && echo "$temp_crontab" | grep -Fq "/usr/bin/certbot renew --quiet"; then
+        echo "✓ Certbot renewal cron job already exists"
+        echo "Current crontab entries containing 'certbot':"
+        echo "$temp_crontab" | grep certbot
+        return 0
+    fi
+
+    echo "Adding certbot renewal cron job..."
+
+    # Create new crontab content
+    if [[ $crontab_exists -eq 0 && -n "$temp_crontab" ]]; then
+        # Existing crontab - append to it
+        {
+            echo "$temp_crontab"
+            echo "$cron_line"
+        } | crontab -
+    else
+        # No existing crontab - create new one
+        echo "$cron_line" | crontab -
+    fi
+
+    if [[ $? -eq 0 ]]; then
+        echo "✓ Certbot renewal cron job added successfully!"
+        echo "Added: $cron_line"
+        echo ""
+        echo "This will automatically renew SSL certificates daily at 12:00 PM."
+        echo "You can view your current crontab with: crontab -l"
+    else
+        echo "✗ Failed to add certbot renewal cron job"
+        return 1
+    fi
+}
+
+# Launch Claude CLI with dangerous mode bypassing permission checks.
+#
+# Usage example:
+#   claude-danger
+claude-danger() {
+    # Check if claude command is available
+    if command -v claude >/dev/null 2>&1; then
+        echo "Launching Claude CLI in dangerous mode (skipping permission checks)..."
+        claude --dangerously-skip-permissions "$@"
+    else
+        echo "Claude is not currently installed."
+        echo "Please install Claude CLI to use this function."
+        return 1
+    fi
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

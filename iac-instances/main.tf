@@ -85,6 +85,7 @@ resource "aws_instance" "ai_army" {
   key_name              = aws_key_pair.ai_army_key.key_name
   vpc_security_group_ids = [aws_security_group.ai_army_sg.id]
   subnet_id             = var.subnet_id
+  iam_instance_profile   = aws_iam_instance_profile.ai_army_instance_profile.name
 
   # Enable detailed monitoring
   monitoring = var.enable_monitoring
@@ -100,57 +101,26 @@ resource "aws_instance" "ai_army" {
     }
   }
 
-  # User data script for initial setup
-  user_data = base64encode(<<-EOF
-    #!/bin/bash
-    # Set hostname
-    hostnamectl set-hostname ${var.instance_name_prefix}-${count.index + 1}
-
-    # Update and upgrade
-    apt-get update
-    apt-get upgrade -y
-
-    # Install basic packages
-    apt-get install -y curl wget git htop tree unzip vim net-tools
-
-    # Install Docker for AI workloads
-    apt-get install -y apt-transport-https ca-certificates gnupg lsb-release
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    apt-get update
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-    # Add ubuntu user to docker group
-    usermod -aG docker ubuntu
-
-    # Install Python3 and pip for AI tools
-    apt-get install -y python3 python3-pip python3-venv
-
-    # Configure automatic security updates
-    apt-get install -y unattended-upgrades
-    dpkg-reconfigure -plow unattended-upgrades
-
-    # Create a welcome message
-    echo "======================================" > /etc/motd
-    echo "Welcome to AI Host Army - Node ${count.index + 1}" >> /etc/motd
-    echo "Instance: ${var.instance_name_prefix}-${count.index + 1}" >> /etc/motd
-    echo "SSH key: ${var.key_name_prefix}-shared" >> /etc/motd
-    echo "======================================" >> /etc/motd
-
-    # Create workspace directory
-    mkdir -p /opt/ai-workspace
-    chown ubuntu:ubuntu /opt/ai-workspace
-
-    # Log completion
-    echo "$(date): User data script completed for ${var.instance_name_prefix}-${count.index + 1}" >> /var/log/user-data.log
-  EOF
-  )
+  # User data using cloud-init configuration
+  user_data = templatefile("${path.module}/cloud-init.yaml", {
+    hostname         = "${var.instance_name_prefix}-${count.index + 1}"
+    node_name        = "Node ${count.index + 1}"
+    key_name         = "${var.key_name_prefix}-shared"
+    s3_bucket_name   = aws_s3_bucket.dotfiles.id
+    aws_region       = var.aws_region
+  })
 
   tags = {
     Name     = "${var.instance_name_prefix}-${count.index + 1}"
     NodeID   = count.index + 1
     ArmyRole = "worker"
   }
+
+  depends_on = [
+    aws_iam_instance_profile.ai_army_instance_profile,
+    aws_s3_bucket.dotfiles,
+    null_resource.upload_dotfiles
+  ]
 }
 
 # Elastic IPs for the instances
