@@ -1,0 +1,79 @@
+# AI Dev VPC Configuration Example
+# Copy this file to terraform.tfvars and update with your values
+
+# VPC Configuration
+vpc_name    = "ai-dev-vpc"
+vpc_cidr    = "10.100.0.0/16"
+environment = "development"
+
+# AWS Configuration
+aws_region  = "us-east-1"
+aws_profile = "bh-fred-sandbox"
+
+# Availability Zone
+# Choose a single AZ for simplified setup
+availability_zone = "us-east-1a"
+
+# Subnet Configuration
+# Public subnet for resources that need internet access
+public_subnet_cidr = "10.100.1.0/24"
+
+# Private subnet for internal resources
+private_subnet_cidr = "10.100.10.0/24"
+
+# NAT Gateway Configuration
+# Set to true if private subnet instances need outbound internet access
+# Set to false to save costs if not needed (~$45/month)
+enable_nat_gateway = false
+
+# Additional Tags (optional)
+additional_tags = {
+  Project     = "ai-army"
+  Terraform   = "true"
+  Owner       = "DevOps"
+  CostCenter  = "Engineering"
+}
+
+# ===================================
+# HOW TO USE THIS FILE:
+# ===================================
+# 1. Copy this file to terraform.tfvars:
+#    cp terraform.tfvars.example terraform.tfvars
+#
+# 2. Edit terraform.tfvars and update:
+#    - aws_profile: Your AWS CLI profile name
+#    - aws_region: Your preferred AWS region
+#    - vpc_cidr: Adjust if it conflicts with existing VPCs
+#    - availability_zone: Choose your preferred AZ
+#    - enable_nat_gateway: Set to false to save costs if not needed
+#
+# 3. Verify your AWS profile is configured:
+#    aws sts get-caller-identity --profile your-profile
+#
+# 4. Initialize and apply Terraform:
+#    terraform init
+#    terraform plan
+#    terraform apply
+#
+# Alternatively, use the helper script to generate this file:
+#    ../scripts/create-tfvars-vpc.sh -p your-profile -r us-east-1
+#
+# IMPORTANT: terraform.tfvars is gitignored to protect sensitive information
+
+# ===================================
+# NETWORKING NOTES:
+# ===================================
+# Default CIDR blocks:
+# - VPC: 10.100.0.0/16 (65,536 IP addresses)
+# - Public Subnet: 10.100.1.0/24 (256 IP addresses)
+# - Private Subnet: 10.100.10.0/24 (256 IP addresses)
+#
+# These won't conflict with:
+# - Default AWS VPC: 172.31.0.0/16
+# - Common corporate networks: 10.0.0.0/8, 192.168.0.0/16
+# - Docker default: 172.17.0.0/16
+#
+# NAT Gateway costs:
+# - ~$45/month for the NAT Gateway
+# - Plus data processing charges ($0.045/GB)
+# - Disable if private subnet doesn't need internet access

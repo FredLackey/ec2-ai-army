@@ -1,0 +1,61 @@
+# AWS Configuration
+# REQUIRED: Set your AWS region and profile
+aws_region  = "us-east-1"
+aws_profile = "your-aws-profile"
+environment = "development"
+
+# Army Configuration
+# Number of EC2 instances to create (1-10)
+instance_count = 3
+
+# VPC and Networking
+# REQUIRED: Specify your VPC and subnet IDs
+vpc_id    = "vpc-xxxxxxxxxxxxxxxxx"   # Your VPC ID
+subnet_id = "subnet-xxxxxxxxxxxxxxxxx" # Your subnet ID (must be in the same VPC)
+
+# Security Configuration
+# REQUIRED: Replace with your IP address for SSH access
+# Use https://whatismyipaddress.com to find your IP
+# Format: "YOUR.IP.ADDRESS.HERE/32" for single IP
+allowed_cidr_blocks = ["0.0.0.0/32"] # CHANGE THIS to your IP address
+
+# EC2 Instance Configuration
+instance_type = "t3.micro" # Free tier eligible instance type
+
+# REQUIRED: Ubuntu AMI ID for your region
+# Use ../scripts/find-ubuntu-amis.sh to find the latest Ubuntu AMI
+# Example command: ../scripts/find-ubuntu-amis.sh -p your-profile -r us-east-1 -v 24.04 -l
+ami_id = "ami-xxxxxxxxxxxxxxxxx" # Ubuntu 24.04 LTS AMI ID
+
+# Resource Naming (Optional - defaults provided)
+key_name_prefix      = "ai-army-key"   # Prefix for SSH key pairs
+instance_name_prefix = "ai-army-host"  # Prefix for instance names
+security_group_name  = "ai-army-sg"    # Security group name
+
+# Instance Configuration (Optional - defaults provided)
+enable_monitoring = true  # Enable detailed CloudWatch monitoring
+root_volume_size  = 20    # Root volume size in GB
+root_volume_type  = "gp3" # EBS volume type (gp3 is latest generation)
+
+# ===================================
+# HOW TO USE THIS FILE:
+# ===================================
+# 1. Copy this file to terraform.tfvars:
+#    cp terraform.tfvars.example terraform.tfvars
+#
+# 2. Edit terraform.tfvars and replace:
+#    - aws_profile: Your AWS CLI profile name
+#    - vpc_id: Your VPC ID
+#    - subnet_id: Your subnet ID (must be in the same VPC)
+#    - allowed_cidr_blocks: Your IP address for SSH access
+#    - ami_id: Latest Ubuntu AMI for your region
+#
+# 3. Find the latest Ubuntu AMI:
+#    ../scripts/find-ubuntu-amis.sh -p your-profile -r your-region -v 24.04 -l
+#
+# 4. Initialize and apply Terraform:
+#    terraform init
+#    terraform plan
+#    terraform apply
+#
+# IMPORTANT: terraform.tfvars is gitignored to protect sensitive information
