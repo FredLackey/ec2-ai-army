@@ -85,3 +85,32 @@ output "dotfiles_upload_command" {
   description = "Command to manually upload local dotfiles to S3"
   value       = "aws s3 sync ./dotfiles/ s3://${aws_s3_bucket.dotfiles.id}/dotfiles/ --delete --profile ${var.aws_profile} --region ${var.aws_region}"
 }
+
+# Create a local outputs.json file for use by scripts
+resource "local_file" "outputs_json" {
+  filename = "${path.module}/outputs.json"
+  content = jsonencode({
+    instances = {
+      for idx, instance in aws_instance.ai_army :
+      "${var.instance_name_prefix}-${idx + 1}" => {
+        id         = instance.id
+        public_ip  = aws_eip.ai_army_eip[idx].public_ip
+        private_ip = instance.private_ip
+        type       = instance.instance_type
+        state      = instance.instance_state
+      }
+    }
+    infrastructure = {
+      private_key_file = "ai-army-shared.pem"
+      security_group_id = aws_security_group.ai_army_sg.id
+      key_name = aws_key_pair.ai_army_key.key_name
+    }
+    army_size = var.instance_count
+    dotfiles = {
+      s3_bucket = aws_s3_bucket.dotfiles.id
+      s3_bucket_arn = aws_s3_bucket.dotfiles.arn
+      sync_command = "sudo /usr/local/bin/sync-dotfiles.sh"
+      upload_command = "aws s3 sync ./dotfiles/ s3://${aws_s3_bucket.dotfiles.id}/dotfiles/ --delete --profile ${var.aws_profile} --region ${var.aws_region}"
+    }
+  })
+}

@@ -7,8 +7,9 @@ set -e
 
 # Default values
 INSTANCE_NUMBER=""
-IAC_PATH="iac-instances"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+IAC_DIR="$REPO_ROOT/iac-instances"
 
 # Colors for output
 RED='\033[0;31m'
@@ -49,7 +50,7 @@ parse_arguments() {
                 shift 2
                 ;;
             -p|--path)
-                IAC_PATH="$2"
+                IAC_DIR="$2"
                 shift 2
                 ;;
             -h|--help)
@@ -78,26 +79,16 @@ parse_arguments() {
     fi
 }
 
-find_outputs_file() {
-    # If IAC_PATH is relative, make it relative to script directory
-    if [[ ! "$IAC_PATH" = /* ]]; then
-        IAC_PATH="$SCRIPT_DIR/../$IAC_PATH"
-    fi
+get_instance_ip() {
+    local outputs_file="$IAC_DIR/outputs.json"
+    local instance_name="ai-army-$INSTANCE_NUMBER"
 
-    local outputs_file="$IAC_PATH/outputs.json"
-
+    # Check if outputs.json exists
     if [[ ! -f "$outputs_file" ]]; then
         print_error "outputs.json file not found at: $outputs_file"
         print_info "Make sure you have run 'terraform apply' in the iac-instances directory"
         exit 1
     fi
-
-    echo "$outputs_file"
-}
-
-get_instance_info() {
-    local outputs_file="$1"
-    local instance_name="ai-army-$INSTANCE_NUMBER"
 
     # Check if jq is available
     if ! command -v jq &> /dev/null; then
@@ -105,52 +96,24 @@ get_instance_info() {
         exit 1
     fi
 
-    # Extract instance information from outputs.json
-    local instance_data
-    instance_data=$(jq -r ".instances[\"$instance_name\"]" "$outputs_file")
+    # Get the public IP from outputs.json
+    local public_ip
+    public_ip=$(jq -r ".instances[\"$instance_name\"].public_ip" "$outputs_file" 2>/dev/null)
 
-    if [[ "$instance_data" == "null" ]]; then
+    if [[ "$public_ip" == "null" || -z "$public_ip" ]]; then
         print_error "Instance '$instance_name' not found in deployment"
         print_info "Available instances:"
         jq -r '.instances | keys[]' "$outputs_file" 2>/dev/null || echo "  No instances found"
         exit 1
     fi
 
-    echo "$instance_data"
+    echo "$public_ip"
 }
 
 connect_to_instance() {
-    local outputs_file="$1"
-    local instance_data="$2"
+    local public_ip="$1"
     local instance_name="ai-army-$INSTANCE_NUMBER"
-
-    # Extract connection details
-    local public_ip
-    local ssh_command
-    local private_key_file
-    local instance_state
-
-    public_ip=$(echo "$instance_data" | jq -r '.public_ip')
-    instance_state=$(echo "$instance_data" | jq -r '.state')
-
-    # Get private key file path from outputs
-    private_key_file=$(jq -r '.infrastructure.private_key_file' "$outputs_file")
-
-    # Validate extracted data
-    if [[ "$public_ip" == "null" || -z "$public_ip" ]]; then
-        print_error "Could not determine public IP for instance $instance_name"
-        exit 1
-    fi
-
-    if [[ "$private_key_file" == "null" || -z "$private_key_file" ]]; then
-        print_error "Could not determine private key file path"
-        exit 1
-    fi
-
-    # Resolve private key file path relative to IAC directory if it's a relative path
-    if [[ ! "$private_key_file" = /* ]]; then
-        private_key_file="$IAC_PATH/$private_key_file"
-    fi
+    local private_key_file="$IAC_DIR/ai-army-shared.pem"
 
     # Check if private key file exists
     if [[ ! -f "$private_key_file" ]]; then
@@ -158,13 +121,7 @@ connect_to_instance() {
         exit 1
     fi
 
-    # Check instance state
-    if [[ "$instance_state" != "running" ]]; then
-        print_warning "Instance $instance_name is in '$instance_state' state, connection may fail"
-    fi
-
     print_info "Connecting to $instance_name ($public_ip)..."
-    print_info "Instance state: $instance_state"
 
     # Set correct permissions on private key
     chmod 600 "$private_key_file" 2>/dev/null || true
@@ -176,13 +133,10 @@ connect_to_instance() {
 main() {
     parse_arguments "$@"
 
-    local outputs_file
-    outputs_file=$(find_outputs_file)
+    local public_ip
+    public_ip=$(get_instance_ip)
 
-    local instance_data
-    instance_data=$(get_instance_info "$outputs_file")
-
-    connect_to_instance "$outputs_file" "$instance_data"
+    connect_to_instance "$public_ip"
 }
 
 main "$@"
