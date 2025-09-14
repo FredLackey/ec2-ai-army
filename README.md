@@ -19,38 +19,99 @@ The infrastructure is designed to be modular, allowing you to scale your AI comp
 - `iac-instances/`: Terraform configuration for EC2 instances
 - `iac-vpc/`: Terraform configuration for VPC setup with public/private subnets
 - `scripts/`: Helper scripts for AWS operations and configuration generation
-- `assets/`: Reference implementations and examples
 
-## Quick Start
+## Usage
 
-For a complete step-by-step deployment guide with commands, see **[PROCESS.md](./PROCESS.md)**.
+### Prerequisites
 
-### Overview
+1. AWS CLI installed and configured with your profile
+2. Terraform installed
+3. Appropriate AWS permissions
 
-1. **Deploy VPC** - Create the network infrastructure (`iac-vpc/`)
-2. **Deploy Instances** - Create EC2 instances in the VPC (`iac-instances/`)
-3. **Access** - SSH into your instances using generated keys
+### Step 1: Deploy VPC (Optional)
 
-The convenience scripts handle configuration generation and AWS setup automatically.
+Only run this step if you need to create a new VPC for your AI Army instances.
 
-### Finding an Ubuntu AMI
+```bash
+cd iac-vpc
 
-The base AMI for the EC2 instances can be updated as needed. To find the latest official Ubuntu AMIs for a specific region, you can use the provided helper script:
+# Create state bucket
+./scripts/setup-state-bucket.sh <your-profile>
+
+# Generate configuration
+../scripts/create-tfvars-vpc.sh -p <your-profile> -r <your-region>
+
+# Deploy
+terraform init
+terraform apply
+```
+
+### Step 2: Discover Your AWS Environment
+
+Run the environment discovery script to identify available VPCs, subnets, and other resources in your AWS region.
+
+```bash
+# Discover and document your AWS environment
+./scripts/discover-environment.sh -p <your-profile> -r <your-region>
+```
+
+This will generate a detailed report showing all VPCs, subnets, security groups, and instances in your region. Use this information to identify the VPC ID and subnet ID you want to use for your instances.
+
+### Step 3: Deploy EC2 Instances
+
+```bash
+cd ../iac-instances
+
+# Create state bucket
+./scripts/setup-state-bucket.sh <your-profile>
+
+# Generate configuration using VPC and subnet IDs from discovery (example: 3 instances)
+# Replace <vpc-id> and <subnet-id> with values from the discovery report
+../scripts/create-tfvars-instances.sh -p <your-profile> -r <your-region> \
+  -v <vpc-id> -s <subnet-id> -c 3
+
+# Deploy
+terraform init
+terraform apply
+
+# Get SSH commands
+terraform output ssh_connection_commands
+```
+
+### Step 4: Access Instances
+
+```bash
+# SSH to an instance
+ssh -i ./ai-army-shared.pem ubuntu@<instance-ip>
+
+# Or use the connection script
+../scripts/connect-to-instance.sh -i 1
+```
+
+### Cleanup
+
+```bash
+# Destroy instances first
+cd iac-instances
+terraform destroy
+
+# Then destroy VPC
+cd ../iac-vpc
+terraform destroy
+```
+
+### Finding an Ubuntu AMI (Optional)
+
+By default, the Terraform configuration will automatically select the latest Ubuntu 22.04 LTS AMI for your region, so you don't need to specify an AMI ID manually.
+
+However, if you want to use a specific Ubuntu version or see what AMI options are available, you can use the provided helper script:
 
 ```bash
 ./scripts/find-ubuntu-amis.sh -p <aws-profile> -r <aws-region> -v 22.04 -l
 ```
 
-This script will show the latest recommended AMI ID, which can then be used in your `terraform.tfvars` file.
+This script will show the latest recommended AMI ID, which can then be used with the `-a` option in the `create-tfvars-instances.sh` script if desired.
 
-## Architectural Patterns
-
-This package follows the patterns and best practices established in two other successful IaC projects:
-
--   `assets/ubuntu-only`: A simple, single Ubuntu EC2 instance deployment.
--   `assets/ubuntu-apache`: A more complex deployment of an Ubuntu instance with Apache and S3 integration.
-
-Reviewing these packages can provide insight into the structure and approach used here.
 
 ## Future Work
 
