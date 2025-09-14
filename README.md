@@ -1,4 +1,4 @@
-# Terraform AI Host Army
+# EC2 AI Host Army
 
 This Terraform project deploys a configurable number of Ubuntu EC2 instances in AWS, intended for AI-related workloads. The project is organized into separate modules for VPC and instance management.
 
