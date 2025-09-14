@@ -87,8 +87,8 @@ create_symlinks() {
         sourceFile="$(cd && pwd)/dotfiles/$i"
         targetFile="$HOME/.$(printf "%s" "$i" | sed "s/.*\/\(.*\)/\1/g")"
 
-        # Check for OS-specific version
-        if [ -n "$os_version" ]; then
+        # Check for OS-specific version (but skip bash_aliases as it includes OS-specific content)
+        if [ -n "$os_version" ] && [ "$(basename "$i")" != "bash_aliases" ]; then
             local os_specific_file="$(cd && pwd)/dotfiles/shell/$os_version/$(basename "$i")"
             if [ -f "$os_specific_file" ]; then
                 sourceFile="$os_specific_file"

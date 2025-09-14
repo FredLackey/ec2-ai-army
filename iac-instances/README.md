@@ -2,6 +2,10 @@
 
 This Terraform module deploys a configurable number of Ubuntu EC2 instances in AWS, intended for AI-related workloads.
 
+**IMPORTANT** SSH Connection Syntax "ssh -i ./ai-army-shared.pem ubuntu@{{IP_ADDRESS}}"
+**IMPORTANT** Dev folder path: /Users/flackey/Source/fredlackey/public/ec2-ai-army/iac-instances
+**IMPORTANT** iac-instances/outputs.json contains instance information (ie ai-army-1, ai-army-2, etc.)
+
 ## State Configuration
 
 The Terraform state for this module uses the S3 bucket: `tfstate-ai-army-instances`
@@ -111,12 +115,19 @@ The module provides the following outputs:
 
 ## Dotfiles Management
 
-The module automatically provisions a dotfiles management system:
+The module automatically provisions a comprehensive dotfiles management system with multi-OS support:
+
+### System Architecture
+- **Source**: Local `iac-instances/dotfiles/` directory contains shell configs, development tools, and install scripts
+- **Storage**: Dotfiles are uploaded to S3 bucket during `terraform apply`
+- **Deployment**: Cloud-init creates sync script and systemd services on each instance
+- **OS Detection**: Automatically selects Ubuntu 22.04/24.04 specific configurations
 
 ### Automatic Synchronization
 - Dotfiles are stored in an S3 bucket created during deployment
-- Each instance syncs dotfiles on boot and every hour via systemd timer
+- Each instance syncs dotfiles on boot and every hour via systemd timer (`/usr/local/bin/sync-dotfiles.sh`)
 - The `dotfiles/` directory is automatically uploaded to S3 during `terraform apply`
+- Symbolic links are created automatically using `create_symbolic_links.sh --yes`
 
 ### Manual Management
 Use the provided script to manage dotfiles:
@@ -135,9 +146,18 @@ Use the provided script to manage dotfiles:
 ./scripts/manage-dotfiles.sh status
 ```
 
+### Dotfiles Structure
+The dotfiles system includes:
+- **Shell Configuration**: Solarized color scheme, Git-aware prompt, aliases, and functions
+- **Development Tools**: Git, Vim, Tmux configurations with sensible defaults
+- **Install Scripts**: Automated setup for Docker, Node.js (via NVM), build essentials
+- **OS-Specific Variants**: Ubuntu 22.04/24.04 server-specific configurations in `shell/ubuntu-XX-svr/`
+
 ### Dotfiles Location on Instances
 - Dotfiles are synced to `/home/ubuntu/dotfiles/`
-- If a `setup.sh` script exists in the dotfiles directory, it runs automatically
+- Shell configs are symlinked to home directory (`.bashrc`, `.bash_profile`, etc.)
+- Cloud-init runs `create_symbolic_links.sh` automatically during boot
+- Full setup via `setup.sh` available for manual execution (installs all development tools)
 - Sync logs are available at `/var/log/dotfiles-sync.log`
 
 ## SSH Access

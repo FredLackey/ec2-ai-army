@@ -130,6 +130,6 @@ runcmd:
     EOF
 
   # Log completion
-  - echo "$(date): Cloud-init completed for ${hostname}" >> /var/log/cloud-init-complete.log
+  - 'echo "$(date): Cloud-init completed for ${hostname}" >> /var/log/cloud-init-complete.log'
 
 final_message: "Cloud-init completed in $UPTIME seconds"
