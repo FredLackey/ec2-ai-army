@@ -9,6 +9,7 @@
 # - Build essentials and system tools
 # - Node.js via NVM
 # - Docker and Docker Compose
+# - AI development tools (Claude Code)
 # - System preferences and optimizations
 #############################################################################
 
@@ -194,6 +195,7 @@ print_summary() {
 
     print_in_green "   ✓ System configuration complete\n"
     print_in_green "   ✓ Development tools installed\n"
+    print_in_green "   ✓ AI development tools installed\n"
     print_in_green "   ✓ Dotfiles configured\n\n"
 
     print_in_purple "   Next Steps:\n"
@@ -204,6 +206,10 @@ print_summary() {
     echo ""
 
     print_in_purple "   Useful Commands:\n"
+    echo "   • claude          - AI coding assistant"
+    echo "   • gemini          - Google AI assistant"
+    echo "   • codex           - OpenAI coding agent"
+    echo "   • grok            - X.AI conversational assistant"
     echo "   • tmux            - Start terminal multiplexer"
     echo "   • vim             - Enhanced text editor"
     echo "   • git             - Version control"
@@ -245,7 +251,14 @@ main() {
         "npm.sh" \
         "docker.sh"
 
-    # Phase 4: Configuration
+    # Phase 4: AI Development Tools
+    install_phase "Phase 4" "AI Development Tools" \
+        "claude.sh" \
+        "gemini.sh" \
+        "codex.sh" \
+        "grok.sh"
+
+    # Phase 5: Configuration
     setup_dotfiles
     setup_preferences
     setup_github_ssh

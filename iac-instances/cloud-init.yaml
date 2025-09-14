@@ -62,6 +62,13 @@ write_files:
         else
           log_message "No create_symbolic_links.sh found in dotfiles directory"
         fi
+
+        # Create symlink for docs folder in home directory
+        if [ -d "$DOTFILES_DIR/docs" ]; then
+          log_message "Creating symlink for docs folder"
+          sudo -u ubuntu ln -sfn "$DOTFILES_DIR/docs" "/home/ubuntu/docs"
+          log_message "Docs symlink created at /home/ubuntu/docs"
+        fi
       else
         log_message "ERROR: Failed to sync dotfiles from S3"
         exit 1

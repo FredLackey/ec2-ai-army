@@ -1,6 +1,8 @@
 # EC2 AI Host Army
 
-This Terraform project deploys a configurable number of Ubuntu EC2 instances in AWS, intended for AI-related workloads. The project is organized into separate modules for VPC and instance management.
+This Terraform project deploys a configurable number of Ubuntu EC2 instances in AWS, **pre-configured with the most popular terminal-based AI clients and development tools**. Each instance comes ready-to-use with Claude CLI, Grok CLI, Gemini CLI, and other AI tools already installed and configured.
+
+The project is organized into separate modules for VPC and instance management, providing a complete infrastructure solution for AI development and experimentation.
 
 ## State Buckets:
 - VPC Module: tfstate-ai-army-vpc
@@ -87,6 +89,24 @@ ssh -i ./ai-army-shared.pem ubuntu@<instance-ip>
 # Or use the connection script
 ../scripts/connect-to-instance.sh -i 1
 ```
+
+### Step 5: Using the Pre-installed AI Tools
+
+Each instance comes with comprehensive documentation and pre-installed AI clients. After connecting to an instance:
+
+```bash
+# Review the comprehensive AI tools documentation
+cd ~/docs
+ls -la
+
+# The docs folder contains setup guides and usage instructions for:
+# - Claude CLI (claude)
+# - Grok CLI (grok)
+# - Gemini CLI and other Google AI tools
+# - Development tools and configurations
+```
+
+All AI clients are pre-installed and ready to use - you just need to configure them with your API keys. See the documentation in `~/docs` for detailed setup instructions for each tool.
 
 ### Cleanup
 
