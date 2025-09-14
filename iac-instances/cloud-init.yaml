@@ -48,14 +48,20 @@ write_files:
         # Make scripts executable
         find "$DOTFILES_DIR" -type f -name "*.sh" -exec chmod +x {} \;
 
-        # Run setup.sh if it exists
-        if [ -f "$DOTFILES_DIR/setup.sh" ]; then
-          log_message "Running dotfiles setup script"
+        # Run create_symbolic_links.sh to set up shell configs (skip full setup.sh to avoid sudo prompts)
+        if [ -f "$DOTFILES_DIR/create_symbolic_links.sh" ]; then
+          log_message "Creating symbolic links for dotfiles"
           cd "$DOTFILES_DIR"
-          sudo -u ubuntu bash ./setup.sh 2>&1 | tee -a "$LOG_FILE"
-          log_message "Dotfiles setup completed"
+
+          # Run the symbolic links script with auto-yes flag to skip prompts
+          sudo -u ubuntu bash -c "
+            cd '$DOTFILES_DIR'
+            ./create_symbolic_links.sh --yes
+          " 2>&1 | tee -a "$LOG_FILE"
+
+          log_message "Dotfiles symbolic links created successfully"
         else
-          log_message "No setup.sh found in dotfiles directory"
+          log_message "No create_symbolic_links.sh found in dotfiles directory"
         fi
       else
         log_message "ERROR: Failed to sync dotfiles from S3"

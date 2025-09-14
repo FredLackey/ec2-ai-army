@@ -19,7 +19,7 @@ backup_bash_files() {
         local backup_file="$backup_dir/${filename}-$(date +%Y%m%d_%H%M%S)"
 
         # Check if this is already a symlink to our dotfiles
-        if [ -L "$file" ] && [[ "$(readlink "$file")" == *"iac-instances/dotfiles"* ]]; then
+        if [ -L "$file" ] && [[ "$(readlink "$file")" == *"dotfiles"* ]]; then
             print_success "Skipping backup of $filename (already our symlink)"
         else
             if [ -e "$file" ]; then
@@ -84,12 +84,12 @@ create_symlinks() {
 
     for i in "${FILES_TO_SYMLINK[@]}"; do
 
-        sourceFile="$(cd && pwd)/iac-instances/dotfiles/$i"
+        sourceFile="$(cd && pwd)/dotfiles/$i"
         targetFile="$HOME/.$(printf "%s" "$i" | sed "s/.*\/\(.*\)/\1/g")"
 
         # Check for OS-specific version
         if [ -n "$os_version" ]; then
-            local os_specific_file="$(cd && pwd)/iac-instances/dotfiles/shell/$os_version/$(basename "$i")"
+            local os_specific_file="$(cd && pwd)/dotfiles/shell/$os_version/$(basename "$i")"
             if [ -f "$os_specific_file" ]; then
                 sourceFile="$os_specific_file"
             fi
@@ -182,7 +182,7 @@ verify_symlinks() {
     for file in "${files[@]}"; do
         if [ -L "$HOME/$file" ]; then
             local target=$(readlink "$HOME/$file")
-            if [[ "$target" == *"iac-instances/dotfiles"* ]]; then
+            if [[ "$target" == *"dotfiles"* ]]; then
                 print_success "$file is correctly linked"
             else
                 print_warning "$file is linked but not to our dotfiles: $target"

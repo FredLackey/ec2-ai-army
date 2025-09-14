@@ -118,3 +118,7 @@ aws-environment.json
 
 # Terraform Output Files
 outputs.json
+
+# AI Files
+.claude/
+CLAUDE.md
