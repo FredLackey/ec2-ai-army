@@ -53,10 +53,7 @@ install_system_utilities() {
     install_package "Direnv" "direnv"
     install_package "ASCIInema" "asciinema"
 
-    # Security utilities
-    install_package "Fail2ban" "fail2ban"
-    install_package "UFW" "ufw"
-    install_package "RKHunter" "rkhunter"
+    # Security utilities removed - not needed for private servers per CLAUDE.md
 
     # Cloud CLI tools (AWS)
     if ! cmd_exists aws; then

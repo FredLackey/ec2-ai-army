@@ -108,5 +108,3 @@ export PYTHONIOENCODING="UTF-8"
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-twilio autocomplete:script bash
-

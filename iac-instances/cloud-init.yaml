@@ -42,11 +42,10 @@ write_files:
       if aws s3 sync "s3://$S3_BUCKET/dotfiles/" "$DOTFILES_DIR/" --region "$S3_REGION" --delete; then
         log_message "Successfully synced dotfiles from S3"
 
-        # Set proper ownership
+        # Set proper ownership and make scripts executable
         chown -R ubuntu:ubuntu "$DOTFILES_DIR"
-
-        # Make scripts executable
         find "$DOTFILES_DIR" -type f -name "*.sh" -exec chmod +x {} \;
+        chown -R ubuntu:ubuntu "$DOTFILES_DIR"
 
         # Run create_symbolic_links.sh to set up shell configs (skip full setup.sh to avoid sudo prompts)
         if [ -f "$DOTFILES_DIR/create_symbolic_links.sh" ]; then

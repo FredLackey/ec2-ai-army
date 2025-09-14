@@ -252,6 +252,30 @@ get_os_name() {
     printf "%s" "$os"
 }
 
+# Get OS directory name for dotfiles
+get_os_dir() {
+    local os_version=""
+
+    # Detect Ubuntu version
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" == "ubuntu" ]]; then
+            if [[ "$VERSION_ID" == "22.04" ]]; then
+                os_version="ubuntu-22-svr"
+            elif [[ "$VERSION_ID" == "24.04" ]]; then
+                os_version="ubuntu-24-svr"
+            fi
+        fi
+    fi
+
+    # Default fallback
+    if [ -z "$os_version" ]; then
+        os_version="$(get_os | tr '[:upper:]' '[:lower:]')"
+    fi
+
+    printf "%s" "$os_version"
+}
+
 # Check version support
 is_supported_version() {
     # shellcheck disable=SC2206

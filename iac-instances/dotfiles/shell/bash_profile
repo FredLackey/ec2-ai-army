@@ -25,10 +25,10 @@ source_bash_files() {
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     cd "$(dirname "$(readlink "${BASH_SOURCE[0]}")")" \
-        && . "../os/utils.sh"
+        && . "../utils.sh"
 
     # shellcheck disable=SC2034
-    declare -r OS="$(get_os_name)"
+    declare -r OS="$(get_os_dir)"
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

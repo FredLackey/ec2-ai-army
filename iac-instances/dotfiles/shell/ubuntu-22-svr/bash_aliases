@@ -2,7 +2,9 @@
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-# Note: Removed screensaver alias as it's not applicable for server environments
+# Lock screen.
+
+alias afk="gnome-screensaver-command --lock"
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
